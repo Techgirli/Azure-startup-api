@@ -1,94 +1,67 @@
-name: my-startup-CI
+name: CD
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-permissions:
-  contents: read
-  security-events: write
+    tags: ['v*.*.*']
 
 jobs:
-  test:
+  deploy-staging:
     runs-on: ubuntu-24.04
+    environment: staging
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm ci
-      - run: npm test -- --coverage
-
-  sast:
-    runs-on: ubuntu-24.04
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v4
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      - name: Quality Gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        timeout-minutes: 5
-
-  dependency-scan:
-    runs-on: ubuntu-24.04
-    needs: test
-    steps:
-      - uses: actions/checkout@v4
-      - name: Trivy FS Scan
-        uses: aquasecurity/trivy-action@0.28.0
+      # OIDC auth — no long-lived service account keys
+      - uses: google-github-actions/auth@v2
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '1'
-          ignore-unfixed: true
-          format: 'sarif'
-          output: 'trivy-fs.sarif'
-      - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: 'trivy-fs.sarif' }
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+      - name: Push to Artifact Registry
+        run: |
+          gcloud artifacts repositories set-docker-authentication my-repo
+          docker tag my-startup/api:${{ github.sha }} \
+            us-docker.pkg.dev/$PROJECT/my-repo/api:${{ github.sha }}
+          docker push us-docker.pkg.dev/$PROJECT/my-repo/api:${{ github.sha }}
+      - name: Deploy to GKE Staging
+        run: |
+          gcloud container clusters get-credentials staging-cluster --region us-central1
+          helm upgrade --install api ./k8s/helm \
+            -f k8s/helm/values-staging.yaml \
+            --set image.tag=${{ github.sha }} \
+            -n staging
 
-  iac-scan:
+  dast:
     runs-on: ubuntu-24.04
-    needs: test
+    needs: deploy-staging
     steps:
       - uses: actions/checkout@v4
-      - name: Trivy IaC Scan
-        uses: aquasecurity/trivy-action@0.28.0
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
         with:
-          scan-type: 'config'
-          scan-ref: 'terraform/'
-          severity: 'HIGH,CRITICAL'
-          exit-code: '1'
+          image: 'ghcr.io/zaproxy/zaproxy:stable'
+          target: 'https://staging.my-startup.com'
+          zap_options: '-t https://staging.my-startup.com'
 
-  build-and-scan:
+  deploy-production:
     runs-on: ubuntu-24.04
-    needs: [sast, dependency-scan, iac-scan]
+    needs: dast
+    environment: production   # ← requires manual approval in GitHub
     steps:
       - uses: actions/checkout@v4
-      - name: Build image (local, no push)
-        uses: docker/build-push-action@v6
+      - uses: google-github-actions/auth@v2
         with:
-          context: ./app
-          push: false
-          load: true
-          tags: my-startup/api:${{ github.sha }}
-      - name: Trivy Image Scan
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: 'my-startup/api:${{ github.sha }}'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
-          ignore-unfixed: true
-          format: 'sarif'
-          output: 'trivy-image.sarif'
-      - name: Upload SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with: { sarif_file: 'trivy-image.sarif' }   
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+      - name: Deploy to GKE Production
+        run: |
+          gcloud container clusters get-credentials prod-cluster --region us-central1
+          helm upgrade --install api ./k8s/helm \
+            -f k8s/helm/values-prod.yaml \
+            --set image.tag=${{ github.sha }} \
+            -n production
+      - name: Health Check
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf https://prod.my-startup.com/health && exit 0
+            sleep 10
+          done
+          echo "Health check failed" && exit 1   

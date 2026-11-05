@@ -1,0 +1,9 @@
+{{ .Chart.Name }} has been deployed to namespace {{ .Release.Namespace }}.
+
+Ingress host: {{ .Values.ingress.host }}
+Image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+
+To verify:
+  kubectl get pods -n {{ .Release.Namespace }}
+  kubectl get svc -n {{ .Release.Namespace }}
+  curl https://{{ .Values.ingress.host }}/health   

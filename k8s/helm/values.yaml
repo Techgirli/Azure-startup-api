@@ -1,0 +1,72 @@
+replicaCount: 2
+
+image:
+  repository: us-docker.pkg.dev/my-startup-staging/my-repo/api
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: "google"
+  host: "api.my-startup.com"
+  tls: true
+  tlsSecretName: "startup-api-tls"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 2000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+
+env:
+  LOG_LEVEL: "info"
+  NODE_ENV: "production"
+
+serviceAccount:
+  name: startup-api-sa
+  annotations:
+    iam.gke.io/gcp-service-account: "startup-api@my-startup-staging.iam.gserviceaccount.com"
+
+networkPolicy:
+  enabled: true   

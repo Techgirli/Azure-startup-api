@@ -1,0 +1,19 @@
+replicaCount: 1
+
+image:
+  repository: us-docker.pkg.dev/my-startup-staging/my-repo/api
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+ingress:
+  host: "staging.my-startup.com"
+
+env:
+  LOG_LEVEL: "debug"
+  NODE_ENV: "staging"   

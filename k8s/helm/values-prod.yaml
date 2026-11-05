@@ -1,0 +1,25 @@
+replicaCount: 3
+
+image:
+  repository: us-docker.pkg.dev/my-startup-production/my-repo/api
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+ingress:
+  host: "api.my-startup.com"
+
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: "startup-api@my-startup-production.iam.gserviceaccount.com"   

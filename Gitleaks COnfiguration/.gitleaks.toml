@@ -1,0 +1,20 @@
+title = "Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "gcp-service-account-key"
+description = "GCP Service Account Key"
+regex = '''"private_key":\s*"-----BEGIN PRIVATE KEY-----'''
+secretGroup = "private_key"
+
+[[rules]]
+id = "gcp-access-token"
+description = "GCP Access Token"
+regex = '''ya29\.[a-zA-Z0-9_-]{20,}'''
+
+[[rules]]
+id = "gcp-api-key"
+description = "GCP API Key"
+regex = '''AIza[0-9A-Za-z\-_]{35}'''   

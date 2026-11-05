@@ -1,7 +1,7 @@
 replicaCount: 3
 
 image:
-  repository: us-docker.pkg.dev/my-startup-production/my-repo/api
+  repository: startupacrprd.azurecr.io/api
 
 resources:
   requests:
@@ -19,7 +19,9 @@ autoscaling:
 
 ingress:
   host: "api.my-startup.com"
+  annotations:
+    appgw.ingress.kubernetes.io/azure-application-gateway: "appgw-startup-prod"
 
 serviceAccount:
   annotations:
-    iam.gke.io/gcp-service-account: "startup-api@my-startup-production.iam.gserviceaccount.com"   
+    azure.workload.identity/client-id: "YOUR_PROD_CLIENT_ID"   

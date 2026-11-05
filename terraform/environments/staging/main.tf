@@ -1,46 +1,70 @@
 terraform {
-  backend "gcs" {
-    bucket = "my-startup-tfstate"
-    prefix = "staging"
+  backend "azurerm" {
+    storage_account_name = "startupstatestg"
+    container_name       = "tfstate"
+    key                  = "staging.tfstate"
   }
 }
 
-provider "google" {
-  project = var.project_id
-  region  = var.region
+provider "azurerm" {
+  features {}
 }
 
-module "network" {
-  source = "../../modules/network"
-
-  project_id      = var.project_id
-  network_name    = "startup-vpc-staging"
-  subnetwork_name = "startup-subnet-staging"
-  region          = var.region
+resource "azurerm_resource_group" "staging" {
+  name     = "rg-startup-staging"
+  location = var.location
+  tags = {
+    environment = "staging"
+  }
 }
 
-module "gke" {
-  source = "../../modules/gke-cluster"
-
-  project_id            = var.project_id
-  cluster_name          = "staging-cluster"
-  region                = var.region
-  network_name          = module.network.network_name
-  subnetwork_name       = module.network.subnetwork_name
-  node_count            = 2
-  min_nodes             = 1
-  max_nodes             = 3
-  node_machine_type     = "e2-medium"
-  node_service_account  = var.node_sa
-  environment           = "staging"
-  deletion_protection   = false
+module "vnet" {
+  source              = "../../modules/vnet"
+  vnet_name           = "vnet-startup-staging"
+  resource_group_name = azurerm_resource_group.staging.name
+  location            = var.location
+  environment         = "staging"
 }
 
-module "artifact_registry" {
-  source = "../../modules/artifact-registry"
+module "log_analytics" {
+  source               = "../../modules/log-analytics"
+  workspace_name       = "log-startup-staging"
+  resource_group_name  = azurerm_resource_group.staging.name
+  location             = var.location
+  environment          = "staging"
+}
 
-  project_id  = var.project_id
-  repo_name   = "my-repo"
-  location    = "us"
-  environment = "staging"
+module "acr" {
+  source              = "../../modules/acr"
+  registry_name       = "startupacrstg"
+  resource_group_name = azurerm_resource_group.staging.name
+  location            = var.location
+  sku                 = "Standard"
+  environment         = "staging"
+}
+
+module "aks" {
+  source                  = "../../modules/aks-cluster"
+  cluster_name            = "staging-aks"
+  resource_group_name     = azurerm_resource_group.staging.name
+  location                = var.location
+  dns_prefix              = "staging-aks"
+  node_count              = 2
+  min_nodes               = 1
+  max_nodes               = 3
+  node_vm_size            = "Standard_D2s_v5"
+  workload_node_count     = 2
+  workload_min_nodes      = 1
+  workload_max_nodes      = 3
+  workload_vm_size        = "Standard_D2s_v5"
+  log_analytics_workspace_id = module.log_analytics.workspace_id
+  private_cluster_enabled = false
+  environment             = "staging"
+}
+
+# Grant AKS access to ACR
+resource "azurerm_role_assignment" "aks_acr_pull" {
+  scope                = module.acr.resource_id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_kubernetes_cluster.this.identity[0].client_id
 }   

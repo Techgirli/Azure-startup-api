@@ -1,29 +1,30 @@
-# DevSecOps Pipeline — Startup API on GCP
+# DevSecOps Pipeline — Startup API on Azure
 
 Production-style CI/CD pipeline with security gates at every stage.
 
 ## Pipeline
 
 PR → Unit Tests → SAST (SonarQube) → SCA (Trivy) → IaC Scan (Trivy)
-→ Docker Build → Container Scan (Trivy) → Push (Artifact Registry)
-→ Deploy Staging (GKE) → DAST (OWASP ZAP) → Approval → Production
+→ Docker Build → Container Scan (Trivy) → Push (ACR)
+→ Deploy Staging (AKS) → DAST (OWASP ZAP) → Approval → Production
 
 
 ## Prerequisites
 
-- GCP project with Container, Artifact Registry, Compute APIs enabled
+- Azure subscription with AKS, ACR, Log Analytics enabled
 - GitHub repository with Actions enabled
 - SonarQube instance (cloud or self-hosted)
-- Workload Identity Federation configured (see `docs/setup.md`)
+- Azure Workload Identity Federation configured (see setup above)
+- Azure CLI installed locally for Terraform
 
 ## Terraform
 
 ```bash
 cd terraform/environments/staging
+az login
 terraform init
 terraform plan
 terraform apply
-
 
 Local Development
 cd app
@@ -42,76 +43,25 @@ Secrets	Gitleaks	Any secret in history
 
 Environments
 Staging	Production
-Nodes	1–3 e2-medium	2–10 e2-standard-4
+Nodes	1–3 D2s_v5	2–10 D4s_v5
 Replicas	1	3 (HPA to 10)
-Binary Auth	Off	On
-Deletion Protection	Off	On
+ACR SKU	Standard	Premium
+Private Cluster	Off	On
 Approval	None	Required (GitHub)
 
 
 ---
 
-## Final Directory Tree (complete)
+## Key Differences from GCP Version
 
-my-startup-api/
-├── .github/
-│ └── workflows/
-│ ├── ci.yml
-│ ├── cd.yml
-│ └── rollback.yml
-├── app/
-│ ├── src/
-│ ├── tests/
-│ │ └── server.test.js
-│ ├── server.js
-│ ├── package.json
-│ └── Dockerfile
-├── terraform/
-│ ├── modules/
-│ │ ├── gke-cluster/
-│ │ │ ├── main.tf
-│ │ │ ├── variables.tf
-│ │ │ ├── outputs.tf
-│ │ │ └── versions.tf
-│ │ ├── artifact-registry/
-│ │ │ ├── main.tf
-│ │ │ ├── variables.tf
-│ │ │ └── outputs.tf
-│ │ └── network/
-│ │ ├── main.tf
-│ │ ├── variables.tf
-│ │ └── outputs.tf
-│ └── environments/
-│ ├── staging/
-│ │ ├── main.tf
-│ │ ├── variables.tf
-│ │ ├── outputs.tf
-│ │ └── terraform.tfvars
-│ └── production/
-│ ├── main.tf
-│ ├── variables.tf
-│ ├── outputs.tf
-│ └── terraform.tfvars
-├── k8s/
-│ └── helm/
-│ ├── Chart.yaml
-│ ├── values.yaml
-│ ├── values-staging.yaml
-│ ├── values-prod.yaml
-│ └── templates/
-│ ├── _helpers.tpl
-│ ├── deployment.yaml
-│ ├── service.yaml
-│ ├── ingress.yaml
-│ ├── hpa.yaml
-│ ├── pdb.yaml
-│ ├── serviceaccount.yaml
-│ ├── networkpolicy.yaml
-│ └── NOTES.txt
-├── .gitleaks.toml
-├── sonar-project.properties
-└── README.md
-
-
-This is now a fully reproducible project — clone it, run the GCP setup script, push to GitHub, and the pipeline runs end-to-end.
-
+| Aspect | GCP | Azure |
+|--------|-----|-------|
+| Auth in CI | `google-github-actions/auth` + WIF | `azure/login@v2` + OIDC |
+| No secrets | WIF provider + SA email | `id-token: write` + client/tenant/sub IDs (public) |
+| Image registry | Artifact Registry (`us-docker.pkg.dev`) | ACR (`startupacrstg.azurecr.io`) |
+| K8s auth | `gcloud container clusters get-credentials` | `az aks get-credentials` |
+| Ingress | GCE Ingress (`ingressClassName: google`) | Application Gateway (`azure-application-gateway`) |
+| Pod identity | GCP SA annotation | Azure Workload Identity (`azure.workload.identity/client-id`) |
+| State backend | GCS bucket | Azure Storage Account (Blob) |
+| Provider | `hashicorp/google` | `hashicorp/azurerm` |
+| Local CLI | `gcloud` | `az` |

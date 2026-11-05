@@ -1,0 +1,49 @@
+google-cloud-sdk/
+google-cloud-sdk.staging/   
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Test coverage
+coverage/
+
+# Environment / secrets
+.env
+.env.*
+*.tfvars
+!terraform.tfvars.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Logs
+*.log
+
+# SonarQube cache
+.sonar/   
+
+# Azure
+*.azure
+.azurerm/
+azurerm.tfstate
+azurerm.tfstate.*   

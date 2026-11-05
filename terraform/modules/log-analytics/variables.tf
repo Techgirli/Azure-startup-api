@@ -1,15 +1,14 @@
-variable "project_id" {
+variable "workspace_name" {
   type        = string
 }
 
-variable "repo_name" {
+variable "resource_group_name" {
   type        = string
-  description = "Artifact Registry repository name"
 }
 
 variable "location" {
   type        = string
-  default     = "us"
+  default     = "eastus"
 }
 
 variable "environment" {

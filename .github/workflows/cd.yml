@@ -1,8 +1,12 @@
-name: CD
+name: Azure-CD
 
 on:
   push:
     tags: ['v*.*.*']
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   deploy-staging:
@@ -10,22 +14,36 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
-      # OIDC auth — no long-lived service account keys
-      - uses: google-github-actions/auth@v2
+
+      # OIDC auth — no client secrets, no long-lived credentials
+      - name: Authenticate to Azure via OIDC
+        uses: azure/login@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.SERVICE_ACCOUNT }}
-      - name: Push to Artifact Registry
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR
         run: |
-          gcloud artifacts repositories set-docker-authentication my-repo
-          docker tag my-startup/api:${{ github.sha }} \
-            us-docker.pkg.dev/$PROJECT/my-repo/api:${{ github.sha }}
-          docker push us-docker.pkg.dev/$PROJECT/my-repo/api:${{ github.sha }}
-      - name: Deploy to GKE Staging
+          az acr login --name ${{ vars.AZURE_ACR_NAME }}
+
+      - name: Build & Push to ACR
         run: |
-          gcloud container clusters get-credentials staging-cluster --region us-central1
+          docker build -t ${{ vars.AZURE_ACR_NAME }}.azurecr.io/api:${{ github.sha }} ./app
+          docker push ${{ vars.AZURE_ACR_NAME }}.azurecr.io/api:${{ github.sha }}
+
+      - name: Set up kubectl
+        run: |
+          az aks get-credentials \
+            --resource-group ${{ vars.AZURE_STAGING_RG }} \
+            --name staging-aks \
+            --admin
+
+      - name: Deploy to AKS Staging
+        run: |
           helm upgrade --install api ./k8s/helm \
             -f k8s/helm/values-staging.yaml \
+            --set image.repository=${{ vars.AZURE_ACR_NAME }}.azurecr.io/api \
             --set image.tag=${{ github.sha }} \
             -n staging
 
@@ -39,25 +57,36 @@ jobs:
         with:
           image: 'ghcr.io/zaproxy/zaproxy:stable'
           target: 'https://staging.my-startup.com'
-          zap_options: '-t https://staging.my-startup.com'
 
   deploy-production:
     runs-on: ubuntu-24.04
     needs: dast
-    environment: production   # ← requires manual approval in GitHub
+    environment: production   # ← requires manual approval
     steps:
       - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
+
+      - name: Authenticate to Azure via OIDC
+        uses: azure/login@v2
         with:
-          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-          service_account: ${{ secrets.SERVICE_ACCOUNT }}
-      - name: Deploy to GKE Production
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up kubectl
         run: |
-          gcloud container clusters get-credentials prod-cluster --region us-central1
+          az aks get-credentials \
+            --resource-group ${{ vars.AZURE_PROD_RG }} \
+            --name prod-aks \
+            --admin
+
+      - name: Deploy to AKS Production
+        run: |
           helm upgrade --install api ./k8s/helm \
             -f k8s/helm/values-prod.yaml \
+            --set image.repository=${{ vars.AZURE_ACR_NAME }}.azurecr.io/api \
             --set image.tag=${{ github.sha }} \
             -n production
+
       - name: Health Check
         run: |
           for i in $(seq 1 30); do

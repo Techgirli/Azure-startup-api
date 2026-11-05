@@ -1,14 +1,4 @@
-variable "project_id" {
+variable "location" {
   type        = string
-  description = "GCP project ID for production"
-}
-
-variable "region" {
-  type        = string
-  default     = "us-central1"
-}
-
-variable "node_sa" {
-  type        = string
-  description = "Node service account email"
+  default     = "eastus"
 }   

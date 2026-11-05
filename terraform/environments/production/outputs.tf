@@ -1,7 +1,7 @@
-output "cluster_endpoint" {
-  value = module.gke.endpoint
+output "aks_cluster_name" {
+  value = module.aks.cluster_name
 }
 
-output "artifact_registry_url" {
-  value = module.artifact_registry.repository_url
+output "acr_login_server" {
+  value = module.acr.login_server
 }   

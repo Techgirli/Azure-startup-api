@@ -1,7 +1,8 @@
+# k8s/helm/values.yaml
 replicaCount: 2
 
 image:
-  repository: us-docker.pkg.dev/my-startup-staging/my-repo/api
+  repository: startupacrstg.azurecr.io/api
   pullPolicy: IfNotPresent
   tag: ""
 
@@ -12,10 +13,12 @@ service:
 
 ingress:
   enabled: true
-  className: "google"
+  className: "azure-application-gateway"
   host: "api.my-startup.com"
   tls: true
-  tlsSecretName: "startup-api-tls"
+  annotations:
+    kubernetes.io/ingress.class: "azure-application-gateway"
+    appgw.ingress.kubernetes.io/azure-application-gateway: "appgw-startup"
 
 resources:
   requests:
@@ -63,10 +66,11 @@ env:
   LOG_LEVEL: "info"
   NODE_ENV: "production"
 
+# Azure Workload Identity (replaces GCP IAM SA annotation)
 serviceAccount:
   name: startup-api-sa
   annotations:
-    iam.gke.io/gcp-service-account: "startup-api@my-startup-staging.iam.gserviceaccount.com"
+    azure.workload.identity/client-id: "YOUR_CLIENT_ID_HERE"
 
 networkPolicy:
   enabled: true   

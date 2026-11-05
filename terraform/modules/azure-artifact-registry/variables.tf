@@ -14,7 +14,7 @@ variable "location" {
 
 variable "sku" {
   type        = string
-  default     = "Standard"
+  default     = "Basic"
 }
 
 variable "environment" {

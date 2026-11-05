@@ -7,18 +7,18 @@ image:
   tag: ""
 
 service:
-  type: ClusterIP
+  type: LoadBalancer    # ← AKS provisions a free Standard LB
   port: 80
   targetPort: 3000
 
 ingress:
-  enabled: true
-  className: "azure-application-gateway"
+  enabled: false        # ← skip ingress for free tier   
+  className: ""          # ← use default (Azure Load Balancer)
   host: "api.my-startup.com"
   tls: true
   annotations:
-    kubernetes.io/ingress.class: "azure-application-gateway"
-    appgw.ingress.kubernetes.io/azure-application-gateway: "appgw-startup"
+    # Remove all appgw annotations
+    # For TLS, use cert-manager or Azure Key Vault cert   
 
 resources:
   requests:

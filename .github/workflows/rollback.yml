@@ -1,0 +1,50 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      revision:
+        description: 'Helm revision to rollback to (blank = previous)'
+        required: false
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - name: Set up GKE credentials
+        run: |
+          CLUSTER=${{ inputs.environment }}-cluster
+          gcloud container clusters get-credentials $CLUSTER --region us-central1
+
+      - name: Rollback Helm release
+        run: |
+          REVISION="${{ inputs.revision }}"
+          if [ -z "$REVISION" ]; then
+            helm rollback api -n ${{ inputs.environment }} --wait --timeout 5m
+          else
+            helm rollback api $REVISION -n ${{ inputs.environment }} --wait --timeout 5m
+          fi
+
+      - name: Verify health
+        run: |
+          HOST=$(helm get values api -n ${{ inputs.environment }} | grep host | awk '{print $2}' | tr -d '"')
+          for i in $(seq 1 30); do
+            curl -sf "https://$HOST/health" && exit 0
+            sleep 10
+          done
+          echo "Rollback verification failed" && exit 1   
